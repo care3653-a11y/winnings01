@@ -184,13 +184,15 @@ async def verify_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"Verification Result:\n{message}")
 
 # =========================
-# BUTTONS HANDLER
+# BUTTONS HANDLER - FULLY FIXED
 # =========================
 async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     user_id = update.effective_user.id
     role = get_user_role(user_id)
     state = context.user_data.get("state")
+
+    print(f"DEBUG: Button pressed -> '{text}' | User: {user_id} | Role: {role}")
 
     # Payment Flow
     if context.user_data.get("waiting_email"):
@@ -206,7 +208,9 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ Failed to generate payment link.")
         return
 
+    # ========================
     # ADMIN SECTION
+    # ========================
     if user_id == ADMIN_ID:
         if text == "📊 Dashboard":
             await show_dashboard(update)
@@ -231,7 +235,8 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(msg)
             return
 
-        elif state == ADD_PREMIUM_STATE:
+        # Add Premium Logic
+        if state == ADD_PREMIUM_STATE:
             try:
                 target = str(int(text))
                 roles = get_roles()
@@ -239,28 +244,30 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 roles.setdefault("experts", {})
                 roles["experts"][target] = {"expires": expiry}
                 save_roles(roles)
-                await update.message.reply_text(f"✅ User {target} is now Pro until {expiry}")
+                await update.message.reply_text(f"✅ User {target} added as Pro!")
             except:
                 await update.message.reply_text("❌ Invalid User ID")
             context.user_data["state"] = None
             return
 
-        elif state == REMOVE_PREMIUM_STATE:
+        # Remove Premium Logic
+        if state == REMOVE_PREMIUM_STATE:
             roles = get_roles()
             uid = str(text.strip())
             if uid in roles.get("experts", {}):
                 del roles["experts"][uid]
                 save_roles(roles)
-                await update.message.reply_text(f"✅ Removed Pro from user {uid}")
+                await update.message.reply_text(f"✅ Removed Pro from {uid}")
             else:
                 await update.message.reply_text("❌ User not found.")
             context.user_data["state"] = None
             return
 
+        # Free Tip & Pro Tip Logic
         if state == FREE_TIP_STATE:
             data = get_tips()
             data["free_tip"] = text
-            data["free_history"].insert(0, text)
+            data.setdefault("free_history", []).insert(0, text)
             data["free_history"] = data["free_history"][:20]
             save_tips(data)
             context.user_data["state"] = None
@@ -283,7 +290,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if text in expert_map:
                 context.user_data["expert_key"] = expert_map[text]
                 context.user_data["state"] = WAITING_EXPERT_TIP
-                await update.message.reply_text(f"Send the new tip for **{text}**:")
+                await update.message.reply_text(f"Send new tip for **{text}**:")
             return
 
         if state == WAITING_EXPERT_TIP:
@@ -296,7 +303,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
     # ========================
-    # FREE & PRO USERS
+    # USER BUTTONS
     # ========================
     if text == "⭐ Bet With Pros":
         context.user_data["waiting_email"] = True
@@ -310,6 +317,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("💎 Select a Tipster:", reply_markup=EXPERT_MENU)
         return
 
+    # Expert Tips
     expert_map = {
         "👤 ShadowPicks01": "shadowpicks01",
         "👻 GhostPL": "ghostpl",
@@ -353,10 +361,10 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif text == "💎 Add Pro Tip":
         context.user_data["state"] = PRO_TIP_STATE
-        await update.message.reply_text("💎 Choose which expert to update:")
+        await update.message.reply_text("💎 Choose expert to update:")
 
 # =========================
-# MAIN - WEBHOOK MODE (FOR RENDER)
+# MAIN - WEBHOOK MODE
 # =========================
 async def main():
     app = Application.builder().token(TOKEN).build()
@@ -370,16 +378,15 @@ async def main():
     await app.initialize()
     await app.start()
 
-    # Webhook Configuration for Render
     await app.updater.start_webhook(
         listen="0.0.0.0",
-        port=8080,                    # Render default port
-        url_path=TOKEN,               # Security: use token as path
-        webhook_url=f"https://{TOKEN.split(':')[0]}.onrender.com/{TOKEN}"  # Change after deployment
+        port=8080,
+        url_path=TOKEN,
+        webhook_url=f"https://your-bot.onrender.com/{TOKEN}"   # ← CHANGE AFTER DEPLOY
     )
 
-    print("✅ Webhook Mode Activated - Bot is now listening")
-    await asyncio.Event().wait()   # Keep running
+    print("✅ Webhook Mode Activated")
+    await asyncio.Event().wait()
 
 
 if __name__ == "__main__":
