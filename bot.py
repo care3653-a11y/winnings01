@@ -305,7 +305,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["waiting_email"] = True
         await update.message.reply_text(
             "💎 Winnings01 Pro\n\n"
-            "Weekly Subscription: GH₵30\n\n"
+            "Weekly COmmunity fee: $2.7\n\n"
             "Send your email address:"
         )
         return
