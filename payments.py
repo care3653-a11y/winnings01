@@ -7,13 +7,13 @@ from datetime import datetime, timedelta
 # CONFIG
 # =========================
 PAYSTACK_SECRET_KEY = os.getenv("PAYSTACK_SECRET_KEY")
+ADMIN_ID = os.getenv("ADMIN_ID")
 
 if not PAYSTACK_SECRET_KEY:
-    print("❌ ERROR: PAYSTACK_SECRET_KEY is not set in environment variables!")
-
+    print("❌ CRITICAL ERROR: PAYSTACK_SECRET_KEY is not set in environment variables!")
 
 # =========================
-# ROLES HELPER (Shared)
+# ROLES HELPER
 # =========================
 def get_roles():
     try:
@@ -21,23 +21,32 @@ def get_roles():
             return json.load(f)
     except:
         return {
-            "admins": [int(os.getenv("ADMIN_ID", 0))],
+            "admins": [int(ADMIN_ID)] if ADMIN_ID else [],
             "experts": {}
         }
 
 
 def save_roles(data):
-    with open("users.json", "w") as f:
-        json.dump(data, f, indent=4)
+    try:
+        with open("users.json", "w") as f:
+            json.dump(data, f, indent=4)
+        return True
+    except Exception as e:
+        print(f"❌ Failed to save roles: {e}")
+        return False
 
 
 # =========================
 # CREATE PAYMENT LINK
 # =========================
-def create_payment(email: str, telegram_id: int):
-    """Create Paystack payment link"""
+def create_payment(email: str, telegram_id: int, amount: int = 3000):
+    """
+    Create Paystack payment link
+    Returns: (payment_url, error_message)
+    """
     if not PAYSTACK_SECRET_KEY:
-        return None, "Payment service not configured"
+        print("❌ Missing PAYSTACK_SECRET_KEY")
+        return None, "Payment service is not configured"
 
     url = "https://api.paystack.co/transaction/initialize"
 
@@ -48,7 +57,7 @@ def create_payment(email: str, telegram_id: int):
 
     payload = {
         "email": email,
-        "amount": 3000,                    # GH₵30.00
+        "amount": amount,                    # Default GH₵30.00
         "currency": "GHS",
         "metadata": {
             "telegram_id": str(telegram_id),
@@ -57,19 +66,27 @@ def create_payment(email: str, telegram_id: int):
     }
 
     try:
-        response = requests.post(url, headers=headers, json=payload, timeout=15)
+        response = requests.post(url, headers=headers, json=payload, timeout=20)
+        
+        print(f"Paystack Response Status: {response.status_code}")  # Debug
+
         data = response.json()
 
         if data.get("status") is True:
-            return data["data"]["authorization_url"], None
+            url = data["data"]["authorization_url"]
+            print(f"✅ Payment link created for {email}")
+            return url, None
         else:
-            error_msg = data.get("message", "Unknown error")
-            print("❌ Paystack Error:", error_msg)
+            error_msg = data.get("message", "Unknown Paystack error")
+            print(f"❌ Paystack Error: {error_msg}")
             return None, error_msg
 
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Network Error in create_payment: {e}")
+        return None, "Network error connecting to Paystack"
     except Exception as e:
-        print("❌ Create payment exception:", e)
-        return None, "Failed to connect to payment gateway"
+        print(f"❌ Unexpected Error in create_payment: {e}")
+        return None, "Failed to create payment link"
 
 
 # =========================
@@ -88,7 +105,7 @@ def verify_payment(reference: str):
     headers = {"Authorization": f"Bearer {PAYSTACK_SECRET_KEY}"}
 
     try:
-        response = requests.get(url, headers=headers, timeout=15)
+        response = requests.get(url, headers=headers, timeout=20)
         data = response.json()
 
         if not data.get("status"):
@@ -103,11 +120,9 @@ def verify_payment(reference: str):
         telegram_id = str(metadata.get("telegram_id"))
 
         if not telegram_id:
-            return False, "Missing user ID in payment data"
+            return False, "Missing telegram_id in payment metadata"
 
-        # ========================
-        # UPGRADE USER TO PRO
-        # ========================
+        # Upgrade to Pro
         roles = get_roles()
         expiry_date = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
 
@@ -116,9 +131,12 @@ def verify_payment(reference: str):
 
         save_roles(roles)
 
-        print(f"✅ PRO UPGRADE SUCCESS → User {telegram_id} until {expiry_date}")
+        print(f"✅ SUCCESS: User {telegram_id} upgraded to Pro until {expiry_date}")
         return True, f"✅ Pro membership activated until {expiry_date}"
 
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Network Error during verification: {e}")
+        return False, "Network error while verifying payment"
     except Exception as e:
-        print("❌ Verify payment exception:", e)
+        print(f"❌ Error in verify_payment: {e}")
         return False, "Internal error while verifying payment"
