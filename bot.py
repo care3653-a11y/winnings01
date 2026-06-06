@@ -390,22 +390,28 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"👥 Total Users: {len(users)}")
 
 # =========================
-# MAIN
+# MAIN - FIXED FOR RENDER
 # =========================
-def main():
+async def run_bot():
     app = Application.builder().token(TOKEN).build()
 
+    # Add all handlers
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("verify", verify_command))
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, buttons))
 
     print("🚀 Winnings01 Bot Running Successfully...")
-    
-    # FIXED: Proper way to run polling
-    import asyncio
-    asyncio.run(app.run_polling())
+
+    # Start the bot
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling(drop_pending_updates=True)
+
+    # Keep the bot running
+    await asyncio.Event().wait()
 
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(run_bot())
