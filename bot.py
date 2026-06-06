@@ -1,6 +1,5 @@
 import json
 from datetime import datetime, timedelta
-import asyncio
 
 from telegram import ReplyKeyboardMarkup, Update
 from telegram.ext import (
@@ -110,26 +109,18 @@ def save_tips(data):
     with open("tips.json", "w") as f:
         json.dump(data, f, indent=4)
 
-def get_expert_tips():
+def get_stats():
     try:
-        with open("experts_tips.json", "r") as f:
+        with open("stats.json", "r") as f:
             return json.load(f)
     except:
-        default = {"shadowpicks01": "", "ghostpl": "", "blackjack": "", "europepicks": "", "live": ""}
-        with open("experts_tips.json", "w") as f:
-            json.dump(default, f, indent=4)
-        return default
-
-def save_expert_tip(expert_key: str, tip: str):
-    tips = get_expert_tips()
-    tips[expert_key] = tip.strip()
-    with open("experts_tips.json", "w") as f:
-        json.dump(tips, f, indent=4)
+        return {"wins": 0, "losses": 0}
 
 def get_user_role(user_id: int) -> str:
     data = get_roles()
     if user_id in data.get("admins", []):
         return "admin"
+
     experts = data.get("experts", {})
     uid = str(user_id)
     if uid in experts:
@@ -140,6 +131,28 @@ def get_user_role(user_id: int) -> str:
         except:
             pass
     return "free"
+
+# =========================
+# EXPERT TIPS
+# =========================
+def get_expert_tips():
+    try:
+        with open("experts_tips.json", "r") as f:
+            return json.load(f)
+    except:
+        default = {
+            "shadowpicks01": "", "ghostpl": "", "blackjack": "",
+            "europepicks": "", "live": ""
+        }
+        with open("experts_tips.json", "w") as f:
+            json.dump(default, f, indent=4)
+        return default
+
+def save_expert_tip(expert_key: str, tip: str):
+    tips = get_expert_tips()
+    tips[expert_key] = tip.strip()
+    with open("experts_tips.json", "w") as f:
+        json.dump(tips, f, indent=4)
 
 # =========================
 # START
@@ -162,6 +175,7 @@ async def show_dashboard(update: Update):
     roles = get_roles()
     users = get_users()
     pros = len(roles.get("experts", {}))
+
     await update.message.reply_text(
         f"📊 **ADMIN DASHBOARD**\n\n"
         f"👥 Total Users: {len(users)}\n"
@@ -184,7 +198,7 @@ async def verify_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"Verification Result:\n{message}")
 
 # =========================
-# BUTTONS HANDLER - FULL
+# BUTTONS HANDLER
 # =========================
 async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
@@ -192,7 +206,9 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     role = get_user_role(user_id)
     state = context.user_data.get("state")
 
-    # Payment Flow
+    # ========================
+    # PAYMENT FLOW - BET WITH PROS
+    # ========================
     if context.user_data.get("waiting_email"):
         email = text.strip()
         if "@" not in email:
@@ -201,12 +217,14 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         payment_url, error = create_payment(email, user_id)
         context.user_data["waiting_email"] = False
         if payment_url:
-            await update.message.reply_text(f"💎 Payment Link Generated!\n\n🔗 {payment_url}")
+            await update.message.reply_text(f"💎 Payment Link Generated!\n\n🔗 {payment_url}\n\nAfter payment your Pro will be activated automatically.")
         else:
             await update.message.reply_text("❌ Failed to generate payment link.")
         return
 
+    # ========================
     # ADMIN SECTION
+    # ========================
     if user_id == ADMIN_ID:
         if text == "📊 Dashboard":
             await show_dashboard(update)
@@ -214,7 +232,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         elif text == "➕ Add Premium":
             context.user_data["state"] = ADD_PREMIUM_STATE
-            await update.message.reply_text("Send User ID to add as Premium:")
+            await update.message.reply_text("Send the Telegram User ID to add as Premium:")
             return
 
         elif text == "➖ Remove Premium":
@@ -226,7 +244,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             msg = "➖ Active Pro Members:\n\n"
             for uid, info in pros.items():
                 msg += f"🆔 {uid} → Expires: {info.get('expires')}\n"
-            msg += "\nSend User ID to remove:"
+            msg += "\nSend the User ID to remove:"
             context.user_data["state"] = REMOVE_PREMIUM_STATE
             await update.message.reply_text(msg)
             return
@@ -257,6 +275,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data["state"] = None
             return
 
+        # Free Tip
         if state == FREE_TIP_STATE:
             data = get_tips()
             data["free_tip"] = text
@@ -267,6 +286,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("✅ Free Tip Saved!")
             return
 
+        # Add Pro Tip (Expert)
         if state == PRO_TIP_STATE:
             context.user_data["state"] = ADD_EXPERT_TIP_STATE
             await update.message.reply_text("💎 Choose expert to add tip for:", reply_markup=EXPERT_MENU)
@@ -296,11 +316,15 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
     # ========================
-    # FREE & PRO USER BUTTONS
+    # FREE & PRO USER SECTION
     # ========================
     if text == "⭐ Bet With Pros":
         context.user_data["waiting_email"] = True
-        await update.message.reply_text("💎 Send your email address:")
+        await update.message.reply_text(
+            "💎 Winnings01 Pro\n\n"
+            "Weekly Subscription: GH₵30\n\n"
+            "Send your email address:"
+        )
         return
 
     if text == "💎 Pro Tips":
@@ -310,6 +334,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("💎 Select a Tipster:", reply_markup=EXPERT_MENU)
         return
 
+    # Expert Tips
     expert_map = {
         "👤 ShadowPicks01": "shadowpicks01",
         "👻 GhostPL": "ghostpl",
@@ -331,6 +356,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("💎 PRO PANEL", reply_markup=PRO_MENU)
         return
 
+    # Other Buttons
     if text == "📊 Free Tips":
         tips = get_tips()
         await update.message.reply_text("🔥 FREE TIP\n\n" + tips.get("free_tip", "No tip yet."))
@@ -347,6 +373,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif text == "📞 Support":
         await update.message.reply_text("📞 Contact Support: @YourUsername")
 
+    # Admin Quick Buttons
     elif text == "📝 Add Free Tip":
         context.user_data["state"] = FREE_TIP_STATE
         await update.message.reply_text("Send the new Free Tip:")
@@ -355,24 +382,31 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["state"] = PRO_TIP_STATE
         await update.message.reply_text("💎 Choose which expert to update:")
 
+    elif text == "📢 Broadcast":
+        await update.message.reply_text("Use /broadcast <message>")
+
+    elif text == "👥 Members":
+        users = get_users()
+        await update.message.reply_text(f"👥 Total Users: {len(users)}")
+
 # =========================
-# MAIN - POLLING MODE
+# MAIN
 # =========================
-async def main():
+def main():
     app = Application.builder().token(TOKEN).build()
 
+    # Handlers
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("verify", verify_command))
+
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, buttons))
 
-    print("🚀 Winnings01 Bot Running in Polling Mode...")
+    print("🚀 Winnings01 Bot Running Successfully...")
 
-    await app.initialize()
-    await app.start()
-    await app.updater.start_polling(drop_pending_updates=True)
-
-    await asyncio.Event().wait()
+    # FIXED VERSION FOR RENDER
+    import asyncio
+    asyncio.run(app.run_polling(drop_pending_updates=True))
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
