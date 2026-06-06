@@ -401,7 +401,11 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, buttons))
 
     print("🚀 Winnings01 Bot Running Successfully...")
-    app.run_polling()
+    
+    # FIXED: Proper way to run polling
+    import asyncio
+    asyncio.run(app.run_polling())
+
 
 if __name__ == "__main__":
     main()
