@@ -23,6 +23,7 @@ ADD_EXPERT_TIP_STATE = 10
 WAITING_EXPERT_TIP = 11
 ADD_PREMIUM_STATE = 20
 REMOVE_PREMIUM_STATE = 21
+BROADCAST_STATE = 30
 
 # =========================
 # MENUS
@@ -115,10 +116,7 @@ def get_expert_tips():
         with open("experts_tips.json", "r") as f:
             return json.load(f)
     except:
-        default = {
-            "shadowpicks01": "", "ghostpl": "", "blackjack": "",
-            "europepicks": "", "live": ""
-        }
+        default = {"shadowpicks01": "", "ghostpl": "", "blackjack": "", "europepicks": "", "live": ""}
         with open("experts_tips.json", "w") as f:
             json.dump(default, f, indent=4)
         return default
@@ -298,16 +296,31 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text("✅ Tip saved successfully!")
             return
 
+        if text == "📢 Broadcast":
+            context.user_data["state"] = BROADCAST_STATE
+            await update.message.reply_text("Send the message to broadcast to all users:")
+            return
+
+    # Broadcast Handler
+    if state == BROADCAST_STATE and user_id == ADMIN_ID:
+        users = get_users()
+        sent = 0
+        for u in users:
+            try:
+                await context.bot.send_message(u["id"], text)
+                sent += 1
+            except:
+                pass
+        await update.message.reply_text(f"✅ Broadcast sent to {sent} users.")
+        context.user_data["state"] = None
+        return
+
     # ========================
-    # FREE & PRO USER SECTION
+    # USER BUTTONS
     # ========================
     if text == "⭐ Bet With Pros":
         context.user_data["waiting_email"] = True
-        await update.message.reply_text(
-            "💎 Winnings01 Pro\n\n"
-            "Weekly COmmunity fee: $2.7\n\n"
-            "Send your email address:"
-        )
+        await update.message.reply_text("💎 Send your email address:")
         return
 
     if text == "💎 Pro Tips":
@@ -354,6 +367,21 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif text == "📞 Support":
         await update.message.reply_text("📞 Contact Support: @monsoon01")
 
+    elif text == "👥 Members":
+        users = get_users()
+        await update.message.reply_text(f"👥 Total Users: {len(users)}")
+
+    elif text == "📈 Statistics":
+        stats = get_stats()
+        total = stats["wins"] + stats["losses"]
+        rate = round((stats["wins"] / total) * 100, 2) if total > 0 else 0
+        await update.message.reply_text(
+            f"📈 STATISTICS\n\n"
+            f"Wins: {stats['wins']}\n"
+            f"Losses: {stats['losses']}\n"
+            f"Win Rate: {rate}%"
+        )
+
     elif text == "📝 Add Free Tip":
         context.user_data["state"] = FREE_TIP_STATE
         await update.message.reply_text("Send the new Free Tip:")
@@ -363,7 +391,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("💎 Choose which expert to update:")
 
 # =========================
-# MAIN - FIXED FOR RENDER
+# MAIN
 # =========================
 async def run_bot():
     app = Application.builder().token(TOKEN).build()
